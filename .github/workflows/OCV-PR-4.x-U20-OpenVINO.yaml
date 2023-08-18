@@ -23,6 +23,7 @@ env:
   OPENCV_TEST_DATA_PATH: '/home/openvino/opencv_extra/testdata'
   OPENCV_DOCKER_WORKDIR: '/home/openvino/opencv'
   DNN_MODELS: '/home/openvino/dnn-models'
+  OMZ_MODELS: '/home/openvino/omz-models'
   PARALLEL_JOBS: 8
 
 jobs:
@@ -104,6 +105,22 @@ jobs:
           rsync -a --exclude=$DOWNLOAD_MODELS_FILE ${{ env.DNN_MODELS }}/* $OPENCV_DNN_TEST_DATA_PATH
           cp $HOME/opencv_extra/testdata/dnn/download_models.py $OPENCV_DNN_TEST_DATA_PATH/dnn
           cd $OPENCV_DNN_TEST_DATA_PATH/dnn && python3 download_models.py
+        fi
+    - name: Extra OMZ models update
+      timeout-minutes: 60
+      run: |
+        DOWNLOAD_MODELS_FILE="person-detection-retail-0013,age-gender-recognition-retail-0013"
+        LATEST_SAVED_HASH=$(cat ${{ env.OMZ_MODELS }}/latest-hash-${{ env.TARGET_BRANCH_NAME }}.txt)
+        LATEST_HASH=$(omz_info_dumper --name $DOWNLOAD_MODELS_FILE | grep -oP '(?<="model_config": ")[^"]*' | xargs grep --no-filename checksum)
+        if [[ $LATEST_HASH == $LATEST_SAVED_HASH ]]; then
+          echo "OMZ models are up to date"
+          echo "OPENCV_OPEN_MODEL_ZOO_DATA_PATH=${{ env.OMZ_MODELS }}" >> $GITHUB_ENV
+        else
+          echo "Updating OMZ models list"
+          echo "OPENCV_OPEN_MODEL_ZOO_DATA_PATH=/home/openvino/new-omz-models" >> $GITHUB_ENV && OPENCV_OPEN_MODEL_ZOO_DATA_PATH='/home/openvino/new-omz-models'
+          mkdir -p "$OPENCV_OPEN_MODEL_ZOO_DATA_PATH"
+          rsync -a ${{ env.OMZ_MODELS }}/* $OPENCV_OPEN_MODEL_ZOO_DATA_PATH
+          omz_downloader -o ${OPENCV_OPEN_MODEL_ZOO_DATA_PATH} --cache_dir ${OPENCV_OPEN_MODEL_ZOO_DATA_PATH}/.omz_cache/ --name $DOWNLOAD_MODELS_FILE
         fi
     - name: Configure OpenCV
       timeout-minutes: 60
